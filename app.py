@@ -34,6 +34,28 @@ def clear_source_widget_state(rows):
         st.session_state.pop(f"source_url_{row['id']}", None)
 
 
+def add_source_row():
+    st.session_state["source_rows"].append(
+        {"id": uuid4().hex, "name": "", "url": ""}
+    )
+    st.session_state.pop("result", None)
+
+
+def reset_source_rows():
+    clear_source_widget_state(st.session_state["source_rows"])
+    st.session_state["source_rows"] = fresh_source_rows()
+    st.session_state.pop("result", None)
+
+
+def delete_source_row(row_id):
+    deleted = [row for row in st.session_state["source_rows"] if row["id"] == row_id]
+    clear_source_widget_state(deleted)
+    st.session_state["source_rows"] = [
+        row for row in st.session_state["source_rows"] if row["id"] != row_id
+    ]
+    st.session_state.pop("result", None)
+
+
 st.set_page_config(
     page_title="Уники подписчиков · TopScore",
     page_icon="✦",
@@ -85,7 +107,6 @@ header_name, header_url, header_delete = st.columns([3, 7, 0.8])
 header_name.markdown('<span class="source-head">Название воронки</span>', unsafe_allow_html=True)
 header_url.markdown('<span class="source-head">Публичная ссылка SaleBot</span>', unsafe_allow_html=True)
 
-row_to_delete = None
 for row in st.session_state["source_rows"]:
     name_column, url_column, delete_column = st.columns([3, 7, 0.8])
     row["name"] = name_column.text_input(
@@ -102,35 +123,26 @@ for row in st.session_state["source_rows"]:
         label_visibility="collapsed",
         placeholder="https://salebot.pro/shared/table/…",
     )
-    if delete_column.button(
+    delete_column.button(
         "×",
         key=f"delete_source_{row['id']}",
         help=f"Удалить «{row['name'] or 'воронку'}»",
         use_container_width=True,
-    ):
-        row_to_delete = row["id"]
-
-if row_to_delete:
-    deleted = [row for row in st.session_state["source_rows"] if row["id"] == row_to_delete]
-    clear_source_widget_state(deleted)
-    st.session_state["source_rows"] = [
-        row for row in st.session_state["source_rows"] if row["id"] != row_to_delete
-    ]
-    st.session_state.pop("result", None)
-    st.rerun()
+        on_click=delete_source_row,
+        args=(row["id"],),
+    )
 
 add_column, reset_column, spacer = st.columns([2.5, 3, 4.5])
-if add_column.button("＋ Добавить воронку", use_container_width=True):
-    st.session_state["source_rows"].append(
-        {"id": uuid4().hex, "name": "", "url": ""}
-    )
-    st.session_state.pop("result", None)
-    st.rerun()
-if reset_column.button("Вернуть исходный список", use_container_width=True):
-    clear_source_widget_state(st.session_state["source_rows"])
-    st.session_state["source_rows"] = fresh_source_rows()
-    st.session_state.pop("result", None)
-    st.rerun()
+add_column.button(
+    "＋ Добавить воронку",
+    use_container_width=True,
+    on_click=add_source_row,
+)
+reset_column.button(
+    "Вернуть исходный список",
+    use_container_width=True,
+    on_click=reset_source_rows,
+)
 
 with st.expander("Как удаляются дубли"):
     st.markdown(
