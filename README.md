@@ -31,5 +31,5 @@ pytest -q
 
 - Repository: `mbikmurzin/unique_for_top_score`
 - Branch: `main`
-- Main file: `app.py`
+- Main file: `streamlit_app.py` (также поддерживается `app.py`)
 - App URL: `https://uniquefortopscore1.streamlit.app`
