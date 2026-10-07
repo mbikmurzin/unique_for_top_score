@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from datetime import date
-from uuid import uuid4
 
+import pandas as pd
 import streamlit as st
 
 from core import build_unique_workbook, parse_sources
@@ -21,38 +21,8 @@ DEFAULT_SOURCES = [
 ]
 
 
-def fresh_source_rows():
-    return [
-        {"id": uuid4().hex, "name": name, "url": url}
-        for name, url in DEFAULT_SOURCES
-    ]
-
-
-def clear_source_widget_state(rows):
-    for row in rows:
-        st.session_state.pop(f"source_name_{row['id']}", None)
-        st.session_state.pop(f"source_url_{row['id']}", None)
-
-
-def add_source_row():
-    st.session_state["source_rows"].append(
-        {"id": uuid4().hex, "name": "", "url": ""}
-    )
-    st.session_state.pop("result", None)
-
-
-def reset_source_rows():
-    clear_source_widget_state(st.session_state["source_rows"])
-    st.session_state["source_rows"] = fresh_source_rows()
-    st.session_state.pop("result", None)
-
-
-def delete_source_row(row_id):
-    deleted = [row for row in st.session_state["source_rows"] if row["id"] == row_id]
-    clear_source_widget_state(deleted)
-    st.session_state["source_rows"] = [
-        row for row in st.session_state["source_rows"] if row["id"] != row_id
-    ]
+def reset_source_editor():
+    st.session_state["source_editor_version"] += 1
     st.session_state.pop("result", None)
 
 
@@ -81,11 +51,6 @@ st.markdown(
         padding: 14px 16px; border-radius: 12px; background: #e6eee9;
         border: 1px solid #c7d8d0; color: #294a42; margin: 1rem 0;
       }
-      .source-head { color: #61756f; font-size: .82rem; font-weight: 700; }
-      div[data-testid="stTextInput"] input { border-radius: 9px; }
-      div[data-testid="column"] .stButton > button[kind="secondary"] {
-        min-height: 40px; border-color: #d7cec0; color: #8c463e;
-      }
     </style>
     """,
     unsafe_allow_html=True,
@@ -99,49 +64,36 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if "source_rows" not in st.session_state:
-    st.session_state["source_rows"] = fresh_source_rows()
+if "source_editor_version" not in st.session_state:
+    st.session_state["source_editor_version"] = 0
 
 st.subheader("Таблицы SaleBot")
-header_name, header_url, header_delete = st.columns([3, 7, 0.8])
-header_name.markdown('<span class="source-head">Название воронки</span>', unsafe_allow_html=True)
-header_url.markdown('<span class="source-head">Публичная ссылка SaleBot</span>', unsafe_allow_html=True)
-
-for row in st.session_state["source_rows"]:
-    name_column, url_column, delete_column = st.columns([3, 7, 0.8])
-    row["name"] = name_column.text_input(
-        "Название воронки",
-        value=row["name"],
-        key=f"source_name_{row['id']}",
-        label_visibility="collapsed",
-        placeholder="Например: Генератор плана",
-    )
-    row["url"] = url_column.text_input(
-        "Публичная ссылка SaleBot",
-        value=row["url"],
-        key=f"source_url_{row['id']}",
-        label_visibility="collapsed",
-        placeholder="https://salebot.pro/shared/table/…",
-    )
-    delete_column.button(
-        "×",
-        key=f"delete_source_{row['id']}",
-        help=f"Удалить «{row['name'] or 'воронку'}»",
-        use_container_width=True,
-        on_click=delete_source_row,
-        args=(row["id"],),
-    )
-
-add_column, reset_column, spacer = st.columns([2.5, 3, 4.5])
-add_column.button(
-    "＋ Добавить воронку",
+source_frame = pd.DataFrame(DEFAULT_SOURCES, columns=["Название воронки", "Ссылка SaleBot"])
+edited_sources = st.data_editor(
+    source_frame,
+    key=f"source_editor_{st.session_state['source_editor_version']}",
+    num_rows="dynamic",
+    hide_index=True,
     use_container_width=True,
-    on_click=add_source_row,
+    height=390,
+    column_config={
+        "Название воронки": st.column_config.TextColumn(
+            "Название воронки",
+            width="medium",
+            required=True,
+        ),
+        "Ссылка SaleBot": st.column_config.TextColumn(
+            "Публичная ссылка SaleBot",
+            width="large",
+            required=True,
+            validate=r"^https://(?:www\.)?salebot\.pro/shared/table/[A-Za-z0-9_-]+/?$",
+        ),
+    },
 )
-reset_column.button(
+st.caption("Добавление и удаление строк — кнопками **＋** и **−** под таблицей.")
+st.button(
     "Вернуть исходный список",
-    use_container_width=True,
-    on_click=reset_source_rows,
+    on_click=reset_source_editor,
 )
 
 with st.expander("Как удаляются дубли"):
@@ -157,11 +109,12 @@ with st.expander("Как удаляются дубли"):
 
 if st.button("Собрать таблицу", type="primary", use_container_width=True):
     try:
-        source_lines = [
-            f"{row['name'].strip()} | {row['url'].strip()}"
-            for row in st.session_state["source_rows"]
-            if row["name"].strip() or row["url"].strip()
-        ]
+        source_lines = []
+        for _, row in edited_sources.fillna("").iterrows():
+            name = str(row["Название воронки"]).strip()
+            url = str(row["Ссылка SaleBot"]).strip()
+            if name or url:
+                source_lines.append(f"{name} | {url}")
         sources = parse_sources("\n".join(source_lines))
         progress_bar = st.progress(0.0)
         status = st.empty()
