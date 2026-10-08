@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import date
 
-import pandas as pd
 import streamlit as st
 
 from core import build_unique_workbook, parse_sources
@@ -19,11 +18,6 @@ DEFAULT_SOURCES = [
     ("Книги для сочинений", "https://salebot.pro/shared/table/jGIb_CoS2zXrdYPgZhQIqm1lMgZswALlMKivbkuEVc8"),
     ("Курсы", "https://salebot.pro/shared/table/LyhO3dX29BqjKwIXIn3XrdAUBTKpyGAQJkgFmOZPzTE"),
 ]
-
-
-def reset_source_editor():
-    st.session_state["source_editor_version"] += 1
-    st.session_state.pop("result", None)
 
 
 st.set_page_config(
@@ -64,37 +58,41 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if "source_editor_version" not in st.session_state:
-    st.session_state["source_editor_version"] = 0
-
 st.subheader("Таблицы SaleBot")
-source_frame = pd.DataFrame(DEFAULT_SOURCES, columns=["Название воронки", "Ссылка SaleBot"])
-edited_sources = st.data_editor(
-    source_frame,
-    key=f"source_editor_{st.session_state['source_editor_version']}",
-    num_rows="dynamic",
-    hide_index=True,
-    use_container_width=True,
-    height=390,
-    column_config={
-        "Название воронки": st.column_config.TextColumn(
-            "Название воронки",
-            width="medium",
-            required=True,
-        ),
-        "Ссылка SaleBot": st.column_config.TextColumn(
-            "Публичная ссылка SaleBot",
-            width="large",
-            required=True,
-            validate=r"^https://(?:www\.)?salebot\.pro/shared/table/[A-Za-z0-9_-]+/?$",
-        ),
-    },
+st.caption(
+    "Для новой воронки заполните любую свободную строку. "
+    "Чтобы исключить воронку, очистите её название и ссылку."
 )
-st.caption("Добавление и удаление строк — кнопками **＋** и **−** под таблицей.")
-st.button(
-    "Вернуть исходный список",
-    on_click=reset_source_editor,
-)
+
+form_rows = []
+with st.form("sources_form", clear_on_submit=False):
+    name_header, url_header = st.columns([3, 7])
+    name_header.markdown("**Название воронки**")
+    url_header.markdown("**Публичная ссылка SaleBot**")
+    available_rows = [*DEFAULT_SOURCES, *(("", "") for _ in range(6))]
+    for index, (default_name, default_url) in enumerate(available_rows):
+        name_column, url_column = st.columns([3, 7])
+        name = name_column.text_input(
+            f"Название воронки {index + 1}",
+            value=default_name,
+            key=f"source_name_{index}",
+            label_visibility="collapsed",
+            placeholder="Название новой воронки",
+        )
+        url = url_column.text_input(
+            f"Ссылка SaleBot {index + 1}",
+            value=default_url,
+            key=f"source_url_{index}",
+            label_visibility="collapsed",
+            placeholder="https://salebot.pro/shared/table/…",
+        )
+        form_rows.append((name, url))
+
+    submitted = st.form_submit_button(
+        "Собрать таблицу",
+        type="primary",
+        width="stretch",
+    )
 
 with st.expander("Как удаляются дубли"):
     st.markdown(
@@ -107,12 +105,12 @@ with st.expander("Как удаляются дубли"):
         """
     )
 
-if st.button("Собрать таблицу", type="primary", use_container_width=True):
+if submitted:
     try:
         source_lines = []
-        for _, row in edited_sources.fillna("").iterrows():
-            name = str(row["Название воронки"]).strip()
-            url = str(row["Ссылка SaleBot"]).strip()
+        for name_value, url_value in form_rows:
+            name = name_value.strip()
+            url = url_value.strip()
             if name or url:
                 source_lines.append(f"{name} | {url}")
         sources = parse_sources("\n".join(source_lines))
@@ -155,7 +153,7 @@ if "result" in st.session_state:
         data=result.workbook,
         file_name=st.session_state["filename"],
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
+        width="stretch",
     )
 
 st.divider()
